@@ -1,118 +1,75 @@
-window.addEventListener('load', () => {
-	todos = JSON.parse(localStorage.getItem('todos')) || [];
-	const nameInput = document.querySelector('#name');
-	const newTodoForm = document.querySelector('#new-todo-form');
+const API_URL = "http://127.0.0.1:5000/api/todos";
 
-	const username = localStorage.getItem('username') || '';
+const form = document.getElementById('new-todo-form'); // Updated to match your form ID
+const todoList = document.getElementById('todo-list'); // Updated to match your task container ID
 
-	nameInput.value = username;
-
-	nameInput.addEventListener('change', (e) => {
-		localStorage.setItem('username', e.target.value);
-	})
-
-	newTodoForm.addEventListener('submit', e => {
-		e.preventDefault();
-
-		const todo = {
-			content: e.target.elements.content.value,
-			category: e.target.elements.category.value,
-			done: false,
-			createdAt: new Date().getTime()
-		}
-
-		todos.push(todo);
-
-		localStorage.setItem('todos', JSON.stringify(todos));
-
-		// Reset the form
-		e.target.reset();
-
-		DisplayTodos()
-	})
-
-	DisplayTodos()
-})
-
-function DisplayTodos () {
-	const todoList = document.querySelector('#todo-list');
-	todoList.innerHTML = "";
-
-	todos.forEach(todo => {
-		const todoItem = document.createElement('div');
-		todoItem.classList.add('todo-item');
-
-		const label = document.createElement('label');
-		const input = document.createElement('input');
-		const span = document.createElement('span');
-		const content = document.createElement('div');
-		const actions = document.createElement('div');
-		const edit = document.createElement('button');
-		const deleteButton = document.createElement('button');
-
-		input.type = 'checkbox';
-		input.checked = todo.done;
-		span.classList.add('bubble');
-		if (todo.category == 'personal') {
-			span.classList.add('personal');
-		} else {
-			span.classList.add('business');
-		}
-		content.classList.add('todo-content');
-		actions.classList.add('actions');
-		edit.classList.add('edit');
-		deleteButton.classList.add('delete');
-
-		content.innerHTML = `<input type="text" value="${todo.content}" readonly>`;
-		edit.innerHTML = 'Edit';
-		deleteButton.innerHTML = 'Delete';
-
-		label.appendChild(input);
-		label.appendChild(span);
-		actions.appendChild(edit);
-		actions.appendChild(deleteButton);
-		todoItem.appendChild(label);
-		todoItem.appendChild(content);
-		todoItem.appendChild(actions);
-
-		todoList.appendChild(todoItem);
-
-		if (todo.done) {
-			todoItem.classList.add('done');
-		}
-		
-		input.addEventListener('change', (e) => {
-			todo.done = e.target.checked;
-			localStorage.setItem('todos', JSON.stringify(todos));
-
-			if (todo.done) {
-				todoItem.classList.add('done');
-			} else {
-				todoItem.classList.remove('done');
-			}
-
-			DisplayTodos()
-
-		})
-
-		edit.addEventListener('click', (e) => {
-			const input = content.querySelector('input');
-			input.removeAttribute('readonly');
-			input.focus();
-			input.addEventListener('blur', (e) => {
-				input.setAttribute('readonly', true);
-				todo.content = e.target.value;
-				localStorage.setItem('todos', JSON.stringify(todos));
-				DisplayTodos()
-
-			})
-		})
-
-		deleteButton.addEventListener('click', (e) => {
-			todos = todos.filter(t => t != todo);
-			localStorage.setItem('todos', JSON.stringify(todos));
-			DisplayTodos()
-		})
-
-	})
+// Load tasks on page load
+async function loadTasks() {
+    const response = await fetch(API_URL);
+    const todos = await response.json();
+    todoList.innerHTML = todos.map(todo =>
+        `<div class="todo-item ${todo.done ? 'done' : ''}">
+            <label>
+                <input type="checkbox" ${todo.done ? 'checked' : ''} onchange="markAsDone(${todo.id}, ${!todo.done})" />
+                <span class="bubble ${todo.category === 'business' ? 'business' : 'personal'}"></span>
+            </label>
+            <div class="todo-content">
+                <input type="text" value="${todo.content}" readonly />
+            </div>
+            <div class="actions">
+                <button class="edit" onclick="editTask(${todo.id})">Edit</button>
+                <button class="delete" onclick="deleteTask(${todo.id})">Delete</button>
+            </div>
+        </div>`
+    ).join('');
 }
+
+// Add new task
+form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const content = document.getElementById('content').value;
+    const category = document.querySelector('input[name="category"]:checked')?.value || 'General';
+    await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, category })
+    });
+    form.reset();
+    loadTasks();
+});
+
+// Mark task as done
+async function markAsDone(id, done) {
+    await fetch(`${API_URL}/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ done })
+    });
+    loadTasks();
+}
+
+// Delete task
+async function deleteTask(id) {
+    await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+    loadTasks();
+}
+
+// Edit task
+async function editTask(id) {
+    const taskElement = document.querySelector(`.todo-item input[value="${id}"]`).closest('.todo-item');
+    const contentInput = taskElement.querySelector('.todo-content input');
+    contentInput.removeAttribute('readonly');
+    contentInput.focus();
+    contentInput.addEventListener('blur', async () => {
+        const newContent = contentInput.value;
+        await fetch(`${API_URL}/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: newContent })
+        });
+        loadTasks();
+    });
+}
+
+// Initialize
+loadTasks();
